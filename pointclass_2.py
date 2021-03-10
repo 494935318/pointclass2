@@ -32,7 +32,7 @@ class self_attention(keras.Model):
         self.convq=[layers.Conv2D(self.out_dim,1,1) for i in range(self.k)]
         self.convk=[layers.Conv2D(self.out_dim,1,1) for i in range(self.k)]
         self.convv=[layers.Conv2D(self.out_dim,1,1) for i in range(self.k)]
-        self.Dense_out=layers.Dense(self.out_dim,activation="relu")
+        self.Dense_out=layers.Dense(self.out_dim,activation="relu",kernel_regularizer=0.002)
         self.norm=keras.layers.BatchNormalization()
         self.soft=keras.layers.Softmax()
         # self.drop=keras.layers.Dropout(0.2)
@@ -61,19 +61,24 @@ def random_sample(xyz):
 
 # %%
 class pointcloud_class(keras.Model):
-    def __init__(self,class_num=10):
+    def __init__(self,class_num=10,laten_dim,group_num):
         super(pointcloud_class,self).__init__()
         self.class_num=class_num
+        self.laten_dim=laten_dim
+        self.group_num=group_num
     def build(self,inputshape):
         self.n=7
-        self.Dense1=keras.layers.Dense(64,activation="relu") 
-        self.Dense2=keras.layers.Dense(128,activation="relu") 
+        self.Dense1=keras.layers.Dense(16,activation="relu") 
+        self.Dense2=keras.layers.Dense(32,activation="relu") 
         self.norm1=keras.layers.BatchNormalization()
         self.norm2=keras.layers.BatchNormalization()
-        self.self_attention=[self_attention(128,1) for i in range(self.n+1)]
-        self.Dense=[layers.Dense(128,activation="relu") for _ in range(self.n)]
-        self.Dense3=layers.Dense(self.class_num)
+        self.self_attention=[self_attention(self.laten_dim[i],1) for i in range(self.n+1)]
+        self.Dense=[layers.Dense(self.laten_dim[i],activation="relu",kernel_regularizer=0.002) for _ in range(self.n)]
+        self.Dense3=layers.Dense(512,activation="relu")
+        self.Dense4=layers.Dense(256,activation="relu")
+        self.Dense5=layers.Dense(self.class_num)
         self.soft=keras.layers.Softmax()
+        self.drop=layers.Dropout(0.5)
     def call(self , points_xyz,training=True):
         # featrue=tf.concat([points_xyz,Density],axis=-1)
         featrue=self.Dense1(points_xyz)
@@ -83,7 +88,7 @@ class pointcloud_class(keras.Model):
         old_xyz=points_xyz
         for i in range(self.n):
             new_xyz = random_sample(old_xyz)
-            _, grouped_feature, idx, grouped_xyz=utils.sample_and_group(new_xyz,0,16,old_xyz,featrue,knn=True)
+            _, grouped_feature, idx, grouped_xyz=utils.sample_and_group(new_xyz,0,self.group_num[i],old_xyz,featrue,knn=True)
             new_xyz=tf.reduce_mean(grouped_xyz,axis=-2)
             local_fature=grouped_feature-tf.reduce_mean(grouped_feature,axis=-2,keepdims=True)
             global_fature=tf.reduce_max(grouped_feature,axis=-2,keepdims=False)
@@ -94,6 +99,10 @@ class pointcloud_class(keras.Model):
         out=self.self_attention[self.n](new_points,training=training)
         out=tf.squeeze(out,axis=1)
         out=self.Dense3(out)
+        out=self.drop(out,training=training)
+        out=self.Dense4(out)
+        out=self.drop(out,training=training)
+        out=self.Dense5(out)
         out=self.soft(out)
         return out
 
@@ -106,7 +115,7 @@ lr_schedule=keras.optimizers.schedules.ExponentialDecay(0.002,100000,0.7,stairca
 
 optimizer=keras.optimizers.Adam(0.001)
 loss=keras.losses.SparseCategoricalCrossentropy(from_logits=False)
-model=pointcloud_class(40)
+model=pointcloud_class(40,[64,64,128,128,256,256,512,512],[32,32,32,16,16,16,8])
 mtric1=keras.metrics.SparseCategoricalAccuracy()
 mtric2=keras.metrics.SparseCategoricalCrossentropy()
 
