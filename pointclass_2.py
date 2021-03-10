@@ -32,7 +32,7 @@ class self_attention(keras.Model):
         self.convq=[layers.Conv2D(self.out_dim,1,1) for i in range(self.k)]
         self.convk=[layers.Conv2D(self.out_dim,1,1) for i in range(self.k)]
         self.convv=[layers.Conv2D(self.out_dim,1,1) for i in range(self.k)]
-        self.Dense_out=layers.Dense(self.out_dim,activation="relu",kernel_regularizer="l2")
+        self.Dense_out=layers.Dense(self.out_dim,activation="relu",kernel_regularizer=keras.regularizers.l2(0.001))
         self.norm=keras.layers.BatchNormalization()
         self.soft=keras.layers.Softmax()
         # self.drop=keras.layers.Dropout(0.2)
@@ -73,7 +73,7 @@ class pointcloud_class(keras.Model):
         self.norm1=keras.layers.BatchNormalization()
         self.norm2=keras.layers.BatchNormalization()
         self.self_attention=[self_attention(self.laten_dim[i],3) for i in range(self.n+1)]
-        self.Dense=[layers.Dense(self.laten_dim[i],activation="relu",kernel_regularizer="l2") for _ in range(self.n)]
+        self.Dense=[layers.Dense(self.laten_dim[i],activation="relu",kernel_regularizer=keras.regularizers.l2(0.001)) for i in range(self.n)]
         self.Dense3=layers.Dense(512,activation="relu")
         self.Dense4=layers.Dense(256,activation="relu")
         self.Dense5=layers.Dense(self.class_num)
@@ -140,10 +140,10 @@ def log_string(out_str):
 #         shuffed_data[k,...]=np.random.shuffle(data[k,...])
 #     return shuffed_data
 
-def callmodel(input,current_label):
+def callmodel(input,current_label,epoch):
     with tf.GradientTape() as tape:
             logits=model(input,training=True)
-            if model.losses :
+            if model.losses is not None and epoch>80:
                 regularization_loss=tf.math.add_n(model.losses)
             else:
                 regularization_loss=0
@@ -192,7 +192,7 @@ def train_one_epoch(epoch):
         # print(jittered_data.dtype)
         # print(jittered_data.shape)
         tf.keras.backend.set_value(optimizer.lr, lr_schedule(BATCH*BATCH_SIZE))
-        callmodel(jittered_data,current_label)
+        callmodel(jittered_data,current_label,epoch)
         # pred_val = np.argmax(logits, 1)
         # correct = np.sum(pred_val == current_label[start_idx:end_idx])
         # total_correct += correct
@@ -272,9 +272,11 @@ for epoch in range(epochs):
     mtric1.reset_states()
     mtric2.reset_states()
 
+#%%
+print(model.losses)
 
 # %%
-ckpt.restore(tf.train.latest_checkpoint('pointcloud_class'))
+ckpt.restore(tf.train.latest_checkpoint('pointcloud_class2'))
 model=ckpt.model
 optimizer=ckpt.opti
 BATCH=ckpt.batch.numpy()
