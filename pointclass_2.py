@@ -68,17 +68,18 @@ class pointcloud_class(keras.Model):
         self.group_num=group_num
     def build(self,inputshape):
         self.n=7
-        self.Dense1=keras.layers.Dense(16,activation="relu") 
-        self.Dense2=keras.layers.Dense(32,activation="relu") 
+        self.Dense1=keras.layers.Dense(64,activation="relu") 
+        self.Dense2=keras.layers.Dense(128,activation="relu") 
         self.norm1=keras.layers.BatchNormalization()
         self.norm2=keras.layers.BatchNormalization()
-        self.self_attention=[self_attention(self.laten_dim[i],1) for i in range(self.n+1)]
+        self.self_attention=[self_attention(self.laten_dim[i],3) for i in range(self.n+1)]
         self.Dense=[layers.Dense(self.laten_dim[i],activation="relu",kernel_regularizer="l2") for _ in range(self.n)]
         self.Dense3=layers.Dense(512,activation="relu")
         self.Dense4=layers.Dense(256,activation="relu")
         self.Dense5=layers.Dense(self.class_num)
         self.soft=keras.layers.Softmax()
-        self.drop=layers.Dropout(0.5)
+        self.drop1=layers.Dropout(0.5)
+        self.drop2=layers.Dropout(0.5)
     def call(self , points_xyz,training=True):
         # featrue=tf.concat([points_xyz,Density],axis=-1)
         featrue=self.Dense1(points_xyz)
@@ -99,16 +100,16 @@ class pointcloud_class(keras.Model):
         out=self.self_attention[self.n](new_points,training=training)
         out=tf.squeeze(out,axis=1)
         out=self.Dense3(out)
-        out=self.drop(out,training=training)
+        out=self.drop1(out,training=training)
         out=self.Dense4(out)
-        out=self.drop(out,training=training)
+        out=self.drop2(out,training=training)
         out=self.Dense5(out)
         out=self.soft(out)
         return out
 
 
 # %%
-lr_schedule=keras.optimizers.schedules.ExponentialDecay(0.002,100000,0.7,staircase=True)
+lr_schedule=keras.optimizers.schedules.ExponentialDecay(0.001,100000,0.7,staircase=True)
 
 
 # %%
@@ -207,7 +208,7 @@ def test_one_epoch(epoch):
 
 # %%
 BATCH=1
-BATCH_SIZE=128
+BATCH_SIZE=32
 
 # %%
 ckpt=tf.train.Checkpoint(model=model,opti=optimizer,batch=tf.Variable(1))
