@@ -33,7 +33,7 @@ class self_attention(keras.Model):
         self.convk=[layers.Conv2D(self.out_dim,1,1) for i in range(self.k)]
         self.convv=[layers.Conv2D(self.out_dim,1,1) for i in range(self.k)]
         self.Dense_out=layers.Dense(self.out_dim,activation="relu",kernel_regularizer=keras.regularizers.l2(0.001))
-        self.norm=keras.layers.BatchNormalization()
+        self.norm=keras.layers.LayerNormalization()
         self.soft=keras.layers.Softmax()
         # self.drop=keras.layers.Dropout(0.2)
     def call(self,input_feature,training=True):
@@ -70,13 +70,13 @@ class pointcloud_class(keras.Model):
         self.n=7
         self.Dense1=keras.layers.Dense(32,activation="relu") 
         self.Dense2=keras.layers.Dense(64,activation="relu") 
-        self.norm=[layers.BatchNormalization() for i in range(4)]
+        self.norm=[layers.LayerNormalization() for i in range(4)]
         self.self_attention=[self_attention(self.laten_dim[i],3) for i in range(self.n+1)]
         self.self_attention2=[self_attention(self.laten_dim[i],3) for i in range(self.n)]
         self.Dense_=[layers.Dense(self.laten_dim[i],activation="relu",kernel_regularizer=keras.regularizers.l2(0.001)) for i in range(self.n)]
         self.Dense_2=[layers.Dense(self.laten_dim[i],activation="relu",kernel_regularizer=keras.regularizers.l2(0.001)) for i in range(self.n)]
-        self.normal_1=[layers.BatchNormalization() for _ in range(self.n)]
-        self.normal_2=[layers.BatchNormalization() for _ in range(self.n)]
+        self.normal_1=[layers.LayerNormalization() for _ in range(self.n)]
+        self.normal_2=[layers.LayerNormalization() for _ in range(self.n)]
         self.Dense3=layers.Dense(256,activation="relu")
         self.Dense4=layers.Dense(256,activation="relu")
         self.Dense5=layers.Dense(self.class_num)
@@ -124,7 +124,7 @@ class pointcloud_class(keras.Model):
 
 
 # %%
-lr_schedule=keras.optimizers.schedules.ExponentialDecay(0.001,100000,0.7,staircase=True)
+lr_schedule=keras.optimizers.schedules.ExponentialDecay(0.001,100000,0.5,staircase=True)
 
 
 # %%
