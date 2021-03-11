@@ -68,13 +68,16 @@ class pointcloud_class(keras.Model):
         self.group_num=group_num
     def build(self,inputshape):
         self.n=7
-        self.Dense1=keras.layers.Dense(64,activation="relu") 
-        self.Dense2=keras.layers.Dense(128,activation="relu") 
-        self.norm1=keras.layers.BatchNormalization()
-        self.norm2=keras.layers.BatchNormalization()
+        self.Dense1=keras.layers.Dense(32,activation="relu") 
+        self.Dense2=keras.layers.Dense(64,activation="relu") 
+        self.norm=[layers.BatchNormalization() for i in range(4)]
         self.self_attention=[self_attention(self.laten_dim[i],3) for i in range(self.n+1)]
-        self.Dense=[layers.Dense(self.laten_dim[i],activation="relu",kernel_regularizer=keras.regularizers.l2(0.001)) for i in range(self.n)]
-        self.Dense3=layers.Dense(512,activation="relu")
+        self.self_attention2=[self_attention(self.laten_dim[i],3) for i in range(self.n)]
+        self.Dense_=[layers.Dense(self.laten_dim[i],activation="relu",kernel_regularizer=keras.regularizers.l2(0.001)) for i in range(self.n)]
+        self.Dense_2=[layers.Dense(self.laten_dim[i],activation="relu",kernel_regularizer=keras.regularizers.l2(0.001)) for i in range(self.n)]
+        self.normal_1=[layers.BatchNormalization() for _ in range(self.n)]
+        self.normal_2=[layers.BatchNormalization() for _ in range(self.n)]
+        self.Dense3=layers.Dense(256,activation="relu")
         self.Dense4=layers.Dense(256,activation="relu")
         self.Dense5=layers.Dense(self.class_num)
         self.soft=keras.layers.Softmax()
@@ -83,25 +86,37 @@ class pointcloud_class(keras.Model):
     def call(self , points_xyz,training=True):
         # featrue=tf.concat([points_xyz,Density],axis=-1)
         featrue=self.Dense1(points_xyz)
-        featrue=self.norm1(featrue,training=training)
+        featrue=self.norm[0](featrue,training=training)
         featrue=self.Dense2(featrue)
-        featrue=self.norm2(featrue,training=training)
+        featrue=self.norm[1](featrue,training=training)
         old_xyz=points_xyz
         for i in range(self.n):
+            _, grouped_feature, idx, _=utils.sample_and_group(old_xyz,0,self.group_num[i],old_xyz,featrue,knn=True)
+            local_fature=grouped_feature-tf.reduce_mean(grouped_feature,axis=-2,keepdims=True)
+            global_fature=tf.reduce_max(grouped_feature,axis=-2,keepdims=False)
+            local_featrue=self.self_attention2[i](local_fature,training=training)
+            featrue=self.Dense_2[i](tf.concat([local_featrue,global_fature],axis=-1))
+            featrue=self.normal_1[i](featrue,training=training)
+
+
             new_xyz = random_sample(old_xyz)
             _, grouped_feature, idx, grouped_xyz=utils.sample_and_group(new_xyz,0,self.group_num[i],old_xyz,featrue,knn=True)
-            new_xyz=tf.reduce_mean(grouped_xyz,axis=-2)
+            # new_xyz=tf.reduce_mean(grouped_xyz,axis=-2)
             local_fature=grouped_feature-tf.reduce_mean(grouped_feature,axis=-2,keepdims=True)
             global_fature=tf.reduce_max(grouped_feature,axis=-2,keepdims=False)
             local_featrue=self.self_attention[i](local_fature,training=training)
-            featrue=self.Dense[i](tf.concat([local_featrue,global_fature],axis=-1))
+            featrue=self.Dense_[i](tf.concat([local_featrue,global_fature],axis=-1))
+            featrue=self.normal_2[i](featrue,training=training)
             old_xyz=new_xyz
         _,new_points,_,_=utils.sample_and_group_all(old_xyz,featrue)
         out=self.self_attention[self.n](new_points,training=training)
         out=tf.squeeze(out,axis=1)
+        
         out=self.Dense3(out)
+        out=self.norm[2](out,training=training)
         out=self.drop1(out,training=training)
         out=self.Dense4(out)
+        out=self.norm[3](out,training=training)
         out=self.drop2(out,training=training)
         out=self.Dense5(out)
         out=self.soft(out)
@@ -208,7 +223,7 @@ def test_one_epoch(epoch):
 
 # %%
 BATCH=1
-BATCH_SIZE=32
+BATCH_SIZE=16
 
 # %%
 ckpt=tf.train.Checkpoint(model=model,opti=optimizer,batch=tf.Variable(1))
